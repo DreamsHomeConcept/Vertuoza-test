@@ -73,6 +73,17 @@ label.champ{display:block;font-size:12px;color:var(--encre-faible);margin-bottom
 input[type=text],input[type=password],select,textarea{width:100%;font:inherit;padding:7px 8px;
   border:1px solid var(--trait);border-radius:2px;background:#fff;color:var(--encre);font-variant-numeric:tabular-nums}
 input:focus,select:focus,textarea:focus{outline:2px solid var(--taupe);outline-offset:-1px;border-color:var(--taupe)}
+.grille-param{display:flex;flex-wrap:wrap;gap:14px 20px;align-items:flex-start;margin-bottom:12px}
+.grille-param>div{min-width:0}
+.grille-param .p-methode{flex:0 1 230px}
+.grille-param .p-cle{flex:1 1 320px;max-width:520px}
+.grille-param .p-court{flex:0 1 220px}
+.grille-param .p-moyen{flex:0 1 270px}
+.unite-champ{display:flex;align-items:stretch}
+.unite-champ input{flex:1;min-width:0;text-align:right;border-radius:2px 0 0 2px}
+.unite-champ span{display:flex;align-items:center;padding:0 10px;border:1px solid var(--trait);border-left:none;border-radius:0 2px 2px 0;
+  background:var(--taupe-voile);font-size:12.5px;color:var(--encre-faible);white-space:nowrap}
+.aide-champ{display:block;margin-top:5px;font-size:11.5px;line-height:1.4;color:var(--encre-faible)}
 .case{display:flex;gap:8px;align-items:flex-start;font-size:13px;line-height:1.45;margin:0 0 10px}
 .case input{margin-top:3px}
 .case small{display:block;color:var(--encre-faible);font-size:12px}
@@ -565,52 +576,68 @@ h3.st .droite{float:right;font-weight:400;font-size:12px;color:var(--encre-faibl
   <div class="corps">
 
     <h3 class="st">Lecture des devis</h3>
-    <div class="grille">
-      <div>
+    <div class="grille-param">
+      <div class="p-methode">
         <label class="champ" for="mode">Méthode</label>
         <select id="mode">
           <option value="ia">Assistée par l'IA</option>
           <option value="auto">Automatique, sans IA</option>
         </select>
       </div>
-      <div>
+      <div class="p-cle">
         <label class="champ" for="cle">Clé API Anthropic</label>
         <input type="password" id="cle" placeholder="sk-ant-..." autocomplete="off" spellcheck="false">
       </div>
-      <div>
-        <label class="champ" for="tauxMO">Coût journalier main-d'œuvre DHC (€ HT / jour)</label>
-        <input type="text" id="tauxMO" inputmode="decimal">
-      </div>
-      <div>
-        <label class="champ" for="rendMontage">Rendement de montage d'ossature (m² / jour)</label>
-        <input type="text" id="rendMontage" inputmode="decimal">
-      </div>
-      <div>
+    </div>
+    <label class="case"><input type="checkbox" id="memCle">
+      <span>Mémoriser la clé sur cet appareil
+        <small>À cocher sur votre poste : sinon la clé est oubliée à la fermeture de l'application, et l'IA ne peut plus lire les devis. À laisser décoché sur un poste partagé.</small>
+      </span></label>
+    <p class="note" id="noteCle"></p>
+
+    <hr class="separateur">
+
+    <h3 class="st">Marge et TVA</h3>
+    <div class="grille-param">
+      <div class="p-court">
         <label class="champ" for="margeDef">Marge par défaut</label>
-        <input type="text" id="margeDef" inputmode="decimal">
+        <div class="unite-champ"><input type="text" id="margeDef" inputmode="decimal"><span>%</span></div>
       </div>
-      <div>
-        <label class="champ" for="margeMode">Lecture du pourcentage</label>
+      <div class="p-moyen">
+        <label class="champ" for="margeMode">Mode de calcul</label>
         <select id="margeMode">
-          <option value="majoration">Majoration du déboursé (30 % = ×1,300)</option>
-          <option value="vente">Marge sur prix de vente (30 % = ×1,429)</option>
+          <option value="majoration">Majoration du déboursé</option>
+          <option value="vente">Marge sur prix de vente</option>
         </select>
+        <small class="aide-champ" id="aideMargeMode"></small>
       </div>
-      <div>
-        <label class="champ" for="tvaDef">TVA par défaut des nouveaux devis</label>
+      <div class="p-moyen">
+        <label class="champ" for="tvaDef">TVA par défaut</label>
         <select id="tvaDef">
           <option value="10">10 % — rénovation</option>
           <option value="20">20 % — taux normal</option>
           <option value="5.5">5,5 % — rénovation énergétique</option>
           <option value="0">0 % — autoliquidation</option>
         </select>
+        <small class="aide-champ">Appliquée aux nouveaux devis.</small>
       </div>
     </div>
-    <p class="note" id="noteCle"></p>
-    <label class="case"><input type="checkbox" id="memCle">
-      <span>Mémoriser la clé sur cet appareil
-        <small>Pratique sur votre poste. À laisser décoché sur un poste partagé : la clé reste alors en mémoire le temps de la session.</small>
-      </span></label>
+
+    <hr class="separateur">
+
+    <h3 class="st">Main-d'œuvre DHC</h3>
+    <div class="grille-param">
+      <div class="p-court">
+        <label class="champ" for="tauxMO">Coût journalier</label>
+        <div class="unite-champ"><input type="text" id="tauxMO" inputmode="decimal"><span>€ HT / jour</span></div>
+        <small class="aide-champ">Valorise les jours des chiffrages de la bibliothèque et du montage, avant marge.</small>
+      </div>
+      <div class="p-court">
+        <label class="champ" for="rendMontage">Rendement de montage</label>
+        <div class="unite-champ"><input type="text" id="rendMontage" inputmode="decimal"><span>m² / jour</span></div>
+        <small class="aide-champ">Ossature métallique, par monteur.</small>
+      </div>
+    </div>
 
     <hr class="separateur">
 
@@ -751,9 +778,9 @@ h3.st .droite{float:right;font-weight:400;font-size:12px;color:var(--encre-faibl
    Fichier unique, sans build. v2 : dossier multi-devis, TVA, paramètres.
    ========================================================================= */
 /* ===== VERSION — le seul endroit à modifier à chaque livraison ===== */
-var VERSION = '2.41';
+var VERSION = '2.43';
 var DATE_VERSION = '21/09/2026';
-var NOTES = 'Montage d\'ossature métallique calculé automatiquement depuis les surfaces du devis : surface ÷ rendement, arrondi au demi-jour supérieur.';
+var NOTES = 'Page Paramètres réorganisée : lecture des devis, marge et TVA, main-d\'œuvre DHC.';
 /* =================================================================== */
 (function(){
 'use strict';
@@ -2548,7 +2575,14 @@ $('margeDef').addEventListener('blur',function(){
   params.margeDefaut=Math.round(n*10)/10; this.value=String(params.margeDefaut).replace('.',',');
   sauveParams();
 });
-$('margeMode').onchange=function(){ params.margeMode=this.value; sauveParams(); rendu(); };
+function majAideMarge(){
+  var m=nombreFr($('margeDef').value); if(!isFinite(m)||m<0) m=params.margeDefaut;
+  var k = params.margeMode==='vente' ? (m<100?1/(1-m/100):0) : 1+m/100;
+  $('aideMargeMode').textContent = k ? (String(m).replace('.',',')+' % = prix de vente égal au déboursé ×'
+    +k.toLocaleString('fr-FR',{minimumFractionDigits:3,maximumFractionDigits:3})+'.') : '';
+}
+$('margeMode').onchange=function(){ params.margeMode=this.value; sauveParams(); majAideMarge(); rendu(); };
+$('margeDef').addEventListener('input',majAideMarge);
 $('sbUrl').oninput=function(){ params.sbUrl=this.value.trim(); sauveParams(); majEtatSb(); };
 $('sbCle').oninput=function(){ params.sbCle=this.value.trim(); sauveParams(); majEtatSb(); };
 $('sbAuto').onchange=function(){ params.sbAuto=this.checked; sauveParams(); };
@@ -2668,9 +2702,14 @@ async function traiteLot(liste){
   var raison='';
   for(var k=0;k<bilan.length;k++){ if(bilan[k].raison){ raison=bilan[k].raison; break; } }
   if(nb===0 && ko){
-    info('Aucune ligne reprise. Cause : '+raison
-        +'. Renseignez une clé API dans les paramètres : sans elle, un devis en image ne peut pas être lu.',
+    var sansCle = /cl[ée] API|cl[ée] absente/i.test(raison) || (!cleRemplie(params.cle) && params.mode==='ia');
+    info((bilan.some(function(b){ return b.rien; }) ? 'Rien n\'a été importé. ' : 'Aucune ligne reprise. ')
+        +'Lecture par l\'IA impossible : '+raison+'.'
+        +(sansCle ? ' Renseignez la clé API de ce poste, puis déposez à nouveau le devis. ' : ' '),
         100,'err');
+    var bp=document.createElement('button'); bp.className='mini'; bp.textContent='Ouvrir les paramètres';
+    bp.onclick=function(){ location.hash='#parametres'; };
+    $('etatTexte').appendChild(bp);
   } else {
     info(tete+nb+' lignes au total.'
         +(notes.length?' '+notes.join(' ; ').replace(/^./,function(c){return c.toUpperCase();})+'.':'')
@@ -2694,10 +2733,11 @@ async function traiteUn(f,prefixe,idx,total){
       }
     }catch(e){ /* lecture impossible : on poursuit comme un devis */ }
   }
-  var cible, ajout=false;
+  var cible, ajout=false, cree=false;
   if(D() && D().mode==='st'){ cible=D(); ajout=true; }              /* on empile dans le devis courant */
   else if(D() && !D().lignes.length && !D().texteBrut){ cible=D(); }
-  else { cible=nouveauDevis(); dossier.push(cible); actif=dossier.length-1; }
+  else { cible=nouveauDevis(); dossier.push(cible); actif=dossier.length-1; cree=true; }
+  var texteAvant=cible.texteBrut;
   try{
     if(estExcel(f)){
       info(prefixe+'Lecture du fichier Excel…',base(20));
@@ -2753,6 +2793,22 @@ async function traiteUn(f,prefixe,idx,total){
         res=analyseLocale(texte);
       }
     } else { info(prefixe+'Découpage automatique…',base(70)); res=analyseLocale(texte); }
+    /* Découpage de secours sans aucune ligne chiffrée : on n'importe rien plutôt que
+       de recopier tout le document ligne à ligne. */
+    if(repli || params.mode!=='ia'){
+      var chiffrees=(res&&res.lignes||[]).filter(function(l){ return l.type==='ligne' && nombreFr(l.pu)>0; }).length;
+      if(!chiffrees){
+        cible.texteBrut=texteAvant;
+        if(cree && !cible.lignes.length){
+          var ix=dossier.indexOf(cible);
+          if(ix>-1 && dossier.length>1){ dossier.splice(ix,1); actif=Math.min(actif,dossier.length-1); }
+        }
+        var cause = !cleRemplie(params.cle) && params.mode==='ia' ? 'aucune clé API sur ce poste'
+          : (repli || 'le découpage automatique n\'a reconnu aucune ligne chiffrée');
+        rendu();
+        return {lignes:0, repli:true, raison:cause, rien:true};
+      }
+    }
     applique(cible,res,f.name,ajout);
     rendu();
     var noteM=cible._noteMontage||''; delete cible._noteMontage;
@@ -3752,6 +3808,7 @@ $('optPied').checked=params.pied;
 $('optMarche').checked=params.marche;
 $('margeDef').value=String(params.margeDefaut).replace('.',',');
 $('margeMode').value=params.margeMode;
+majAideMarge();
 $('tauxMO').value=String(params.tauxMO).replace('.',',');
 $('rendMontage').value=String(params.rendMontage).replace('.',',');
 $('rendMontage').addEventListener('blur',function(){
