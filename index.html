@@ -203,7 +203,7 @@ tr.r-chapitre td.des .prefixe{color:var(--taupe)}
 .imp-feuille{border:1px solid var(--trait);border-left:4px solid var(--taupe);border-radius:3px;margin-bottom:12px;background:#fff}
 .imp-tete{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:10px 12px;background:var(--taupe-voile)}
 .imp-tete input[type=text]{width:auto;flex:1;min-width:180px}
-.imp-tete select,.imp-tete .surf{width:auto}
+.imp-tete select,.imp-tete .surf,.imp-tete input[type=date]{width:auto}
 .imp-tete .surf{width:90px}
 .imp-lignes{max-height:30vh;overflow:auto;font-size:12.5px}
 .imp-lignes table{width:100%;border-collapse:collapse}
@@ -218,6 +218,10 @@ tr.r-chapitre td.des .prefixe{color:var(--taupe)}
 .lien-mt{display:block;border:none;background:none;padding:2px 0 0;font-size:11.5px;color:var(--taupe-fonce);cursor:pointer;text-decoration:underline;font-weight:500}
 .lien-mt:hover{background:none;color:var(--nuit)}
 .tab-inter small.bibli{display:block;font-size:11px;color:var(--taupe-fonce)}
+td.total .somme{font-weight:700;white-space:nowrap}
+tr.r-chapitre td.total .somme{color:#fff;font-size:14px}
+tr.r-sous td.total .somme{color:var(--nuit)}
+tr.r-option td.total .somme,tr.r-refuse td.total .somme{opacity:.6;text-decoration:line-through}
 .barre-tab{display:flex;gap:6px;justify-content:flex-end;margin-bottom:6px}
 td.num .plie{border:none;background:transparent;padding:0 4px 0 0;font-size:12px;line-height:1;cursor:pointer;color:inherit;opacity:.8}
 td.num .plie:hover{opacity:1;background:transparent}
@@ -326,6 +330,7 @@ td.pv{width:116px;text-align:right;color:var(--taupe-fonce);font-weight:500;whit
 .bloc:first-child{border-left:none;padding-left:0}
 .bloc .bt{position:absolute;top:2px;left:10px;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--taupe);font-weight:600;white-space:nowrap}
 .bloc:first-child .bt{left:0}
+.bloc .bt .u{text-transform:none;letter-spacing:0}
 .bloc div{font-size:12px;color:#A9B2BF;white-space:nowrap}
 .bloc b{display:block;font-size:16px;color:#fff;font-weight:600}
 .bloc i{display:block;font-style:normal;font-size:12px;color:var(--taupe);margin:0}
@@ -556,9 +561,10 @@ h3.st .droite{float:right;font-weight:400;font-size:12px;color:var(--encre-faibl
   <h2><span id="biTitre">Bibliothèque de modèles</span> <span class="droite" id="biNote"></span></h2>
   <div class="corps">
     <div class="rangee-boutons" id="biImport" style="margin:0 0 14px">
-      <button class="fant" id="btnImportBiblio">Importer un chiffrage Excel</button>
-      <input type="file" id="fichierBiblio" accept=".xlsx,.xls,.xlsm" hidden>
+      <button class="fant" id="btnImportBiblio">Importer un modèle — PDF ou Excel</button>
+      <input type="file" id="fichierBiblio" accept="application/pdf,.pdf,.xlsx,.xls,.xlsm" hidden>
     </div>
+    <p class="note" id="biEtat" hidden></p>
     <div id="biRecup"></div>
     <h3 class="st">Devis types — neuf</h3><div id="biNeuf"></div>
     <h3 class="st" style="margin-top:20px">Devis types — rénovation</h3><div id="biReno"></div>
@@ -754,14 +760,10 @@ h3.st .droite{float:right;font-weight:400;font-size:12px;color:var(--encre-faibl
         <div class="ttc">TTC <b id="tTtc">0,00 €</b></div>
       </div>
       <div class="bloc" id="blocM2" style="display:none">
-        <span class="bt" id="tM2Lib">Au m²</span>
+        <span class="bt" id="tM2Lib">Prix au <span class="u">m²</span></span>
         <div>HT <b id="tM2Ht">—</b></div>
         <div>TTC <b id="tM2Ttc">—</b></div>
         <div id="blocM2Deb">Déboursé <b id="tM2Deb">—</b></div>
-      </div>
-      <div class="bloc discret">
-        <div>Lignes <b id="tNb">0</b></div>
-        <div>Dossier HT <b id="tDossier">0,00 €</b></div>
       </div>
     </div>
     <div class="actions">
@@ -778,9 +780,9 @@ h3.st .droite{float:right;font-weight:400;font-size:12px;color:var(--encre-faibl
    Fichier unique, sans build. v2 : dossier multi-devis, TVA, paramètres.
    ========================================================================= */
 /* ===== VERSION — le seul endroit à modifier à chaque livraison ===== */
-var VERSION = '2.43';
+var VERSION = '2.46';
 var DATE_VERSION = '21/09/2026';
-var NOTES = 'Page Paramètres réorganisée : lecture des devis, marge et TVA, main-d\'œuvre DHC.';
+var NOTES = 'Réponse de l\'IA reçue en continu (plus de coupure sur les longs devis) ; somme affichée sur chaque chapitre et sous-chapitre.';
 /* =================================================================== */
 (function(){
 'use strict';
@@ -1264,6 +1266,17 @@ function rendu(){
     majTotaux(); appliqueLecture(); return;
   }
   var M=lignesMasquees(d);
+  /* somme de chaque chapitre et sous-chapitre, au prix affiché dans la colonne Total ;
+     une option non retenue montre sa propre valeur, sans entrer dans celle du chapitre */
+  var sommes={}, iChap=-1, iSous=-1;
+  d.lignes.forEach(function(r,i){
+    if(r.type==='chapitre'){ iChap=i; iSous=-1; sommes[i]=0; return; }
+    if(r.type==='sous'){ iSous=i; sommes[i]=0; return; }
+    if(r.type!=='ligne') return;
+    var v=nombreFr(r.qte)*puVente(d,r);
+    if(iSous>-1 && (!r.option || d.lignes[iSous].option)) sommes[iSous]+=v;
+    if(iChap>-1 && !r.option) sommes[iChap]+=v;
+  });
   tb.innerHTML=d.lignes.map(function(r,i){
     if(M.caches[i]) return '';
     var estLigne=r.type==='ligne';
@@ -1283,7 +1296,7 @@ function rendu(){
       +'<td class="pu">'+(estLigne?'<input type="text" data-c="pu" value="'+echappe(affichePu(r.pu))+'">':'')+'</td>'
       +(params.multiTaux?'<td class="tvl">'+(estLigne?selectTaux(r.tva,d.tva):'')+'</td>':'')
       +(margeVisible(d)?'<td class="pv">'+(estLigne?eur(puVente(d,r)):'')+'</td>':'')
-      +'<td class="total">'+(estLigne?eur(totalLigne(d,r)):'')+'</td>'
+      +'<td class="total">'+(estLigne?eur(totalLigne(d,r)):(titre?'<span class="somme">'+eur(sommes[i]||0)+'</span>':''))+'</td>'
       +'<td class="outils">'
         +'<button class="mini" data-a="haut" title="Monter"'+(i===0?' disabled':'')+'>↑</button>'
         +'<button class="mini" data-a="bas" title="Descendre"'+(i===d.lignes.length-1?' disabled':'')+'>↓</button>'
@@ -1347,8 +1360,6 @@ function majTotaux(){
   $('tTva').textContent=eur(tva);
   $('tTvaLib').textContent = v.length>1 ? 'TVA (plusieurs taux)' : 'TVA '+pct(v.length?v[0].taux:d.tva);
   $('tTtc').textContent=eur(ttc);
-  $('tNb').textContent=String(d.lignes.filter(function(r){return r.type==='ligne'&&!r.option&&!refuse(d,r);}).length);
-  $('tDossier').textContent=eur(dossier.reduce(function(s,x){return s+totalHt(x);},0));
 
   /* Achat : jamais de TVA de ce côté, la sous-traitance étant en autoliquidation. */
   var deb=debourse(d);
@@ -1362,7 +1373,7 @@ function majTotaux(){
   var sf=nombreFr(d.surface);
   $('blocM2').style.display = sf>0?'':'none';
   if(sf>0){
-    $('tM2Lib').textContent='Au m² · '+sf.toLocaleString('fr-FR')+' m²';
+    $('tM2Lib').innerHTML='Prix au <span class="u">m²</span>, '+sf.toLocaleString('fr-FR')+' <span class="u">m²</span>';
     $('tM2Ht').textContent=eur(ht/sf);
     $('tM2Ttc').textContent=eur(ttc/sf);
     $('blocM2Deb').style.display = d.margeActive?'':'none';
@@ -1815,6 +1826,13 @@ function integreModeles(modeles,surface,ajuste){
 }
 $('btnDepuisBiblio').onclick=dialogueInsertion;
 
+/* Message d'état propre à la page Bibliothèque (celui des devis n'y est pas visible). */
+function etatBi(txt,classe){
+  var e=$('biEtat'); if(!e) return;
+  e.hidden=!txt; e.textContent=txt||'';
+  e.style.color = classe==='err' ? 'var(--alerte)' : (classe==='ok' ? 'var(--valide)' : '');
+  e.style.fontWeight = classe ? '600' : '';
+}
 /* -------------------- import d'un chiffrage Excel en modèles -------------------- */
 /* Format des chiffrages DHC : une feuille par modèle, titre avec la surface
    (« TOITURE NEUVE 100 M2 »), colonnes Prix unitaire / Unité / Quantité /
@@ -1946,21 +1964,113 @@ async function importeFeuilles(liste){
     if(meme && !confirm('Un modèle « '+meme.nom+' » existe déjà. Le remplacer ?')) continue;
     var lignes=x.f.lignes.map(function(l){ var c=Object.assign({},l); delete c.lien; return c; });
     await ecrisModele({ id: meme?meme.id:('m'+Date.now().toString(36)+Math.random().toString(36).slice(2,6)+i),
-      nom:x.nom, categorie:x.cat, intervenant:x.nom, lot:devineLot(lignes)||'', nature:'dhc',
-      surfaceRef:x.surface, datePrix:new Date().toISOString().slice(0,10),
+      nom:x.nom, categorie:x.cat, intervenant:x.intervenant||x.nom, lot:x.lot||devineLot(lignes)||'', nature:x.nature||'dhc',
+      surfaceRef:x.surface, datePrix:x.datePrix||new Date().toISOString().slice(0,10),
       cree: meme?meme.cree:Date.now(), maj:Date.now(), lignes:lignes, protege:posteBibliothecaire() });
     faits++;
   }
   planifieSync();
-  info(faits+(faits>1?' modèles importés':' modèle importé')+' dans la bibliothèque.'
-    +(refuses.length?' Non remplacé(s), car modèles de référence : '+refuses.join(', ')+'.':''), 100, refuses.length?'avertit':'ok');
+  var msgImp=faits+(faits>1?' modèles importés':' modèle importé')+' dans la bibliothèque.'
+    +(refuses.length?' Non remplacé(s), car modèles de référence : '+refuses.join(', ')+'.':'');
+  info(msgImp, 100, refuses.length?'avertit':'ok'); etatBi(msgImp, refuses.length?'':'ok');
   renduBiblio();
 }
+/* ------------------------- import d'un modèle en PDF ------------------------- */
+/* Même lecture que pour un devis reçu (CGV écartées, pages en image lues à l'œil),
+   puis aperçu : une entrée par option pour une offre à variantes. */
+async function dialogueImportPdf(fichier){
+  if(params.mode!=='ia' || !cleRemplie(params.cle)){
+    etatBi('Un modèle en PDF est lu par l\'IA : renseignez la clé API dans les paramètres, méthode « Assistée par l\'IA ».','err');
+    return;
+  }
+  var res, e;
+  try{
+    etatBi('Lecture du PDF…');
+    var lu=await lirePdf(fichier,function(p,t,img){ etatBi(img?'Page '+p+' en image : préparation…':'Lecture du PDF… page '+p+'/'+t); });
+    if(!lu.texte.trim() && !lu.images.length){ etatBi('Ce PDF ne contient ni texte ni page lisible.','err'); return; }
+    etatBi('Analyse par l\'IA…');
+    suiviIA=function(n){ if(n>0) etatBi('Analyse par l\'IA… '+n+(n>1?' lignes reçues':' ligne reçue')); };
+    res=await analyseIA(lu.texte,lu.images,function(i,n){ etatBi('Analyse par l\'IA… partie '+i+'/'+n); });
+    suiviIA=null;
+  }catch(er){
+    suiviIA=null;
+    etatBi('Lecture par l\'IA impossible : '+((er&&er.message)||er)+'. Rien n\'a été importé.','err');
+    return;
+  }
+  e=res.entete||{};
+  var emetteur=(e.intervenant||e.client||fichier.name.replace(/\.pdf$/i,'')).trim();
+  var toutes=(res.lignes||[]).concat.apply(res.lignes||[],(res.variantes||[]).map(function(v){return v.lignes||[];}));
+  var lot=(e.lot||'').trim()||devineLot(toutes)||'';
+  var versModele=function(brut){
+    return convertitLignes(brut,'').filter(function(l){ return !l.option; }).map(function(l){
+      var c={type: l.type==='chapitre' ? 'sous' : l.type, designation:l.designation};
+      if(c.type==='ligne'){ c.unite=l.unite||''; c.qte=nombreFr(l.qte); c.pu=nombreFr(l.pu); c.echelle=(c.unite==='m²'); }
+      return c;
+    });
+  };
+  var vs=(res.variantes||[]).filter(function(v){ return v && (v.lignes||[]).length; });
+  var entrees = vs.length>1
+    ? vs.map(function(v,j){ return {suffixe:v.nom||('Option '+(j+1)), lignes:versModele(v.lignes), totalImp:nombreFr(v.total_ht)}; })
+    : [{suffixe:'', lignes:versModele(vs.length===1?vs[0].lignes:(res.lignes||[])), totalImp:nombreFr(vs.length===1?vs[0].total_ht:e.total_ht)}];
+  entrees=entrees.filter(function(x){ return x.lignes.some(function(l){ return l.type==='ligne' && l.pu>0; }); });
+  if(!entrees.length){ etatBi('L\'IA n\'a trouvé aucune ligne chiffrée dans ce PDF. Rien n\'a été importé.','err'); return; }
+  etatBi('');
+  var natureDef = e.nature==='fournisseur' ? 'fournisseur' : 'sous-traitant';
+  var dateDef = dateIso(e.date) || new Date().toISOString().slice(0,10);
+  var surfDef = nombreFr(e.surface_ossature)||'';
+  var html=entrees.map(function(x,fi){
+    var tot=x.lignes.reduce(function(t,l){ return t+(l.type==='ligne'?l.qte*l.pu:0); },0);
+    var ecart=x.totalImp ? Math.abs(tot-x.totalImp) : null;
+    var lignes=x.lignes.map(function(l,li){
+      if(l.type!=='ligne') return '<tr class="s"><td colspan="4">'+echappe(l.designation)+'</td></tr>';
+      return '<tr><td><input type="checkbox" data-f="'+fi+'" data-l="'+li+'"'+(l.echelle?' checked':'')+' title="Quantité ajustée à la surface du chantier"></td>'
+        +'<td>'+echappe(l.designation)+'</td><td class="n">'+afficheQte(l.qte)+' '+echappe(l.unite)+'</td><td class="n">'+eur(l.pu)+'</td></tr>';
+    }).join('');
+    return '<div class="imp-feuille">'
+      +'<div class="imp-tete"><label class="case" style="margin:0"><input type="checkbox" class="imp-oui" data-f="'+fi+'"'+(fi===0||entrees.length===1?' checked':'')+'></label>'
+        +'<input type="text" class="imp-nom" data-f="'+fi+'" value="'+echappe((lot?lot+' — ':'')+emetteur+(x.suffixe?' — '+x.suffixe:''))+'">'
+        +'<select class="imp-cat" data-f="'+fi+'">'+Object.keys(CATEGORIES).map(function(k){ return '<option value="'+k+'"'+(k==='intervenant'?' selected':'')+'>'+CATEGORIES[k]+'</option>'; }).join('')+'</select>'
+        +'<select class="imp-nat" data-f="'+fi+'">'
+          +'<option value="sous-traitant"'+(natureDef==='sous-traitant'?' selected':'')+'>prestation posée</option>'
+          +'<option value="fournisseur"'+(natureDef==='fournisseur'?' selected':'')+'>matériaux</option>'
+          +'<option value="dhc">travaux DHC</option></select>'
+        +'<input type="text" class="surf imp-surf" data-f="'+fi+'" inputmode="decimal" value="'+surfDef+'" placeholder="—" title="Surface de référence (m²)"> m²'
+        +'<input type="date" class="imp-date" data-f="'+fi+'" value="'+dateDef+'" title="Date des prix" style="width:auto">'
+      +'</div>'
+      +'<div class="imp-lignes"><table><tr><td colspan="4" class="note" style="border-top:none">Cochez les lignes dont la quantité suit la surface du chantier.</td></tr>'+lignes+'</table></div>'
+      +'<div class="imp-pied">'+(function(n){ return n+(n>1?' lignes':' ligne'); })(x.lignes.filter(function(l){return l.type==='ligne';}).length)+' · <b>total '+eur(tot)+'</b>'
+        +(ecart==null?'':(ecart<1?' · <span style="color:var(--valide);font-weight:600">✓ identique au total imprimé</span>'
+          :' · <span style="color:var(--alerte);font-weight:600">⚠ écart de '+eur(ecart)+' avec le total imprimé ('+eur(x.totalImp)+') : à vérifier</span>'))
+      +'</div></div>';
+  }).join('');
+  ouvreModale('Importer « '+fichier.name+' » dans la bibliothèque',
+    (entrees.length>1?'<p class="note" style="margin-top:0">Offre à '+entrees.length+' options : cochez celle à enregistrer, ou plusieurs pour en faire des modèles séparés.</p>':'')+html,
+    [{lib:'Annuler', action:function(){}},
+     {lib:'Importer', plein:true, action:function(){
+        var corps=$('modCorps');
+        Array.prototype.forEach.call(corps.querySelectorAll('input[data-l]'),function(c){
+          entrees[+c.getAttribute('data-f')].lignes[+c.getAttribute('data-l')].echelle=c.checked;
+        });
+        var choix=Array.prototype.filter.call(corps.querySelectorAll('.imp-oui'),function(c){return c.checked;})
+          .map(function(c){ return +c.getAttribute('data-f'); });
+        if(!choix.length){ alert('Cochez au moins une entrée.'); return false; }
+        var val=function(cls,fi){ return corps.querySelector('.'+cls+'[data-f="'+fi+'"]').value; };
+        importeFeuilles(choix.map(function(fi){
+          return {f:{lignes:entrees[fi].lignes}, nom:val('imp-nom',fi).trim()||emetteur, cat:val('imp-cat',fi),
+            surface:nombreFr(val('imp-surf',fi))||0, nature:val('imp-nat',fi), intervenant:emetteur, lot:lot,
+            datePrix:val('imp-date',fi)||dateDef};
+        }));
+     }}]);
+}
+
 $('btnImportBiblio').onclick=function(){
   if(!stockageOk){ info('La bibliothèque a besoin de la sauvegarde locale, indisponible dans ce navigateur.',0,'err'); return; }
   $('fichierBiblio').click();
 };
-$('fichierBiblio').onchange=function(){ var f=this.files[0]; this.value=''; if(f) dialogueImportChiffrage(f); };
+$('fichierBiblio').onchange=function(){
+  var f=this.files[0]; this.value=''; if(!f) return;
+  if(f.type==='application/pdf' || /\.pdf$/i.test(f.name)) dialogueImportPdf(f); else dialogueImportChiffrage(f);
+};
 
 /* ------------------------------ page Bibliothèque ------------------------------ */
 var modelesEnLigne=[];
@@ -2784,8 +2894,10 @@ async function traiteUn(f,prefixe,idx,total){
     var res, repli='';
     if(params.mode==='ia'){
       info(prefixe+'Analyse par l\'IA…',base(40));
-      try{ res=await analyseIA(texte,images,function(i,n){ info(prefixe+'Analyse par l\'IA… partie '+i+'/'+n, base(40+50*i/n)); }); }
+      suiviIA=function(n){ if(n>0) info(prefixe+'Analyse par l\'IA… '+n+(n>1?' lignes reçues':' ligne reçue'), base(40+Math.min(45,n))); };
+      try{ res=await analyseIA(texte,images,function(i,n){ info(prefixe+'Analyse par l\'IA… partie '+i+'/'+n, base(40+50*i/n)); }); suiviIA=null; }
       catch(e){
+        suiviIA=null;
         repli=(e&&e.message)?e.message:'appel impossible';
         if(/failed to fetch|networkerror|load failed/i.test(repli))
           repli='appel bloqué par le navigateur (clé absente ou domaine non autorisé)';
@@ -3142,20 +3254,43 @@ function decoupe(texte,taille){
   if(cur.trim()) out.push(cur);
   return out;
 }
+/* Réception en continu : l'IA transmet sa réponse au fil de l'écriture. La connexion
+   n'est jamais muette, et un antivirus, une box ou un proxy ne la coupe plus sur un
+   long devis. suiviIA(n), s'il est défini, reçoit le nombre de lignes déjà lues. */
+var suiviIA=null;
 async function appelClaude(systeme,message){
   var cle=(params.cle||CFG.apiKey||'').trim();
   var h={'Content-Type':'application/json'};
   if(cle){ h['x-api-key']=cle; h['anthropic-version']='2023-06-01'; h['anthropic-dangerous-direct-browser-access']='true'; }
   var rep=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:h,
-    body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:cle?24000:1000,system:systeme,
+    body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:cle?24000:1000,system:systeme,stream:true,
       messages:[{role:'user',content:message}]})});
   if(!rep.ok){ var t=await rep.text(); throw new Error('l\'API a répondu '+rep.status+(t?' — '+t.slice(0,160):'')); }
-  var data=await rep.json();
-  if(data.stop_reason==='max_tokens'){
+  var txt='', arret=null, tampon='', vues=-1;
+  var traite=function(bloc){
+    bloc.split('\n').forEach(function(l){
+      if(l.indexOf('data:')!==0) return;
+      var j; try{ j=JSON.parse(l.slice(5).trim()); }catch(e){ return; }
+      if(j.type==='content_block_delta' && j.delta && j.delta.type==='text_delta') txt+=j.delta.text;
+      else if(j.type==='message_delta' && j.delta && j.delta.stop_reason) arret=j.delta.stop_reason;
+      else if(j.type==='error') throw new Error('l\'API a signalé une erreur — '+((j.error&&j.error.message)||'inconnue'));
+    });
+  };
+  var pousse=function(morceau,fin){
+    tampon+=morceau;
+    var parts=tampon.split('\n\n'); tampon=fin?'':parts.pop();
+    parts.forEach(traite); if(fin && tampon) traite(tampon);
+    if(suiviIA){ var n=(txt.match(/"type"\s*:\s*"ligne"/g)||[]).length; if(n!==vues){ vues=n; try{ suiviIA(n); }catch(e){} } }
+  };
+  if(rep.body && rep.body.getReader){
+    var lecteur=rep.body.getReader(), dec=new TextDecoder();
+    for(;;){ var r=await lecteur.read(); if(r.done) break; pousse(dec.decode(r.value,{stream:true}),false); }
+    pousse(dec.decode(),true);
+  } else pousse(await rep.text(),true);
+  if(arret==='max_tokens'){
     var coupe=new Error('réponse de l\'IA coupée, document trop long pour une seule lecture');
     coupe.tronque=true; throw coupe;
   }
-  var txt=(data.content||[]).filter(function(b){return b.type==='text';}).map(function(b){return b.text;}).join('\n');
   txt=txt.replace(/```json|```/g,'').trim();
   var a=txt.indexOf('{'), b=txt.lastIndexOf('}');
   if(a>-1&&b>a) txt=txt.slice(a,b+1);
