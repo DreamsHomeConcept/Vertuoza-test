@@ -204,6 +204,8 @@ tr.r-chapitre td.des .prefixe{color:var(--taupe)}
 .ref{display:inline-block;font-size:10.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--nuit);
   background:var(--taupe-pale);border:1px solid var(--taupe);border-radius:2px;padding:1px 6px}
 .vieux{color:#A5611B !important;font-weight:600}
+.lien-mt{display:block;border:none;background:none;padding:2px 0 0;font-size:11.5px;color:var(--taupe-fonce);cursor:pointer;text-decoration:underline;font-weight:500}
+.lien-mt:hover{background:none;color:var(--nuit)}
 .tab-inter small.bibli{display:block;font-size:11px;color:var(--taupe-fonce)}
 .barre-tab{display:flex;gap:6px;justify-content:flex-end;margin-bottom:6px}
 td.num .plie{border:none;background:transparent;padding:0 4px 0 0;font-size:12px;line-height:1;cursor:pointer;color:inherit;opacity:.8}
@@ -525,6 +527,7 @@ h3.st .droite{float:right;font-weight:400;font-size:12px;color:var(--encre-faibl
 <section class="panneau">
   <h2><span id="chTitre">Mes chantiers</span> <span class="droite" id="chNote"></span></h2>
   <div class="corps">
+    <div id="chRecup"></div>
     <div class="conso" id="consoEnCours"></div>
     <h3 class="st" style="margin-top:18px">En cours</h3>
     <div id="listeEnCours"></div>
@@ -577,6 +580,10 @@ h3.st .droite{float:right;font-weight:400;font-size:12px;color:var(--encre-faibl
       <div>
         <label class="champ" for="tauxMO">Coût journalier main-d'œuvre DHC (€ HT / jour)</label>
         <input type="text" id="tauxMO" inputmode="decimal">
+      </div>
+      <div>
+        <label class="champ" for="rendMontage">Rendement de montage d'ossature (m² / jour)</label>
+        <input type="text" id="rendMontage" inputmode="decimal">
       </div>
       <div>
         <label class="champ" for="margeDef">Marge par défaut</label>
@@ -744,9 +751,9 @@ h3.st .droite{float:right;font-weight:400;font-size:12px;color:var(--encre-faibl
    Fichier unique, sans build. v2 : dossier multi-devis, TVA, paramètres.
    ========================================================================= */
 /* ===== VERSION — le seul endroit à modifier à chaque livraison ===== */
-var VERSION = '2.37';
+var VERSION = '2.41';
 var DATE_VERSION = '21/09/2026';
-var NOTES = 'Import de chiffrages Excel dans la bibliothèque, main-d\'œuvre DHC en jours, nature « travaux DHC », ajustement à la surface ligne par ligne.';
+var NOTES = 'Montage d\'ossature métallique calculé automatiquement depuis les surfaces du devis : surface ÷ rendement, arrondi au demi-jour supérieur.';
 /* =================================================================== */
 (function(){
 'use strict';
@@ -785,6 +792,7 @@ var params = {
   marche:true,
   margeDefaut:30,
   tauxMO:906,
+  rendMontage:30,
   margeMode:'majoration',
   sbUrl:'', sbCle:'', sbAuto:false
 };
@@ -852,7 +860,7 @@ function sauveParams(){
   ecrisStockage(CLE_PARAMS, JSON.stringify({
     mode:params.mode, tvaDefaut:params.tvaDefaut, prefixe:params.prefixe,
     multiTaux:params.multiTaux, pied:params.pied, marche:params.marche,
-    margeDefaut:params.margeDefaut, margeMode:params.margeMode, tauxMO:params.tauxMO,
+    margeDefaut:params.margeDefaut, margeMode:params.margeMode, tauxMO:params.tauxMO, rendMontage:params.rendMontage,
     sbUrl:params.sbUrl, sbCle:params.sbCle, sbAuto:params.sbAuto,
     cleEdition:params.cleEdition||'', cleConsult:params.cleConsult||'', biblioSeule:!!params.biblioSeule
   }));
@@ -870,6 +878,7 @@ function chargeParams(){
     if(o.margeDefaut!=null && isFinite(parseFloat(o.margeDefaut))) params.margeDefaut=parseFloat(o.margeDefaut);
     if(o.margeMode==='vente'||o.margeMode==='majoration') params.margeMode=o.margeMode;
     if(o.tauxMO!=null && isFinite(parseFloat(o.tauxMO)) && parseFloat(o.tauxMO)>0) params.tauxMO=parseFloat(o.tauxMO);
+    if(o.rendMontage!=null && parseFloat(o.rendMontage)>0) params.rendMontage=parseFloat(o.rendMontage);
     if(typeof o.sbUrl==='string') params.sbUrl=o.sbUrl;
     if(typeof o.sbCle==='string') params.sbCle=o.sbCle;
     if(typeof o.sbAuto==='boolean') params.sbAuto=o.sbAuto;
@@ -914,7 +923,12 @@ function puVente(d,r){ return Math.round(puAchat(r)*coefficient(d,r)*100)/100; }
 function totalLigne(d,r){ return (r.type==='ligne'&&!r.option)?nombreFr(r.qte)*puVente(d,r):0; }
 function debourseLigne(r){ return (r.type==='ligne'&&!r.option)?nombreFr(r.qte)*puAchat(r):0; }
 /* Un intervenant décoché n'est plus compté : ses lignes restent visibles, grisées. */
-function refuse(d,r){ return !!(r.intervenant && d.retenus && d.retenus[r.intervenant]===false); }
+function refuse(d,r){
+  if(!r.intervenant || !d.retenus) return false;
+  if(d.retenus[r.intervenant]===false) return true;
+  var src=(d.liensMontage||{})[r.intervenant];               /* un montage suit son fournisseur */
+  return !!(src && d.retenus[src]===false);
+}
 function totalHt(d){ return d.lignes.reduce(function(s,r){return s+(refuse(d,r)?0:totalLigne(d,r));},0); }
 function debourse(d){ return d.lignes.reduce(function(s,r){return s+(refuse(d,r)?0:debourseLigne(r));},0); }
 function debourseBrut(d){ return d.lignes.reduce(function(s,r){return s+debourseLigne(r);},0); }
@@ -1102,9 +1116,11 @@ function renduRecapSt(){
     if(!groupes[k]){ groupes[k]={lot:lot, liste:[]}; ordre.push(k); }
     groupes[k].liste.push(x);
   });
+  /* le montage se range juste après l'ossature qu'il pose */
+  var cleTri=function(k){ return k==='montageossature' ? 'ossature\uffff' : groupes[k].lot; };
   ordre.sort(function(a,b){
     if(a==='sanslot') return 1; if(b==='sanslot') return -1;
-    return groupes[a].lot.localeCompare(groupes[b].lot,'fr');
+    return cleTri(a).localeCompare(cleTri(b),'fr');
   });
 
   var tete='<thead><tr>'
@@ -1140,7 +1156,9 @@ function renduRecapSt(){
         : '<small class="ecart ok">le moins cher</small>');
       html+='<tr class="it'+(ret?'':' refuse')+'">'
         +'<td class="c-ret" data-l="Retenu"><input type="checkbox" data-retenu="'+echappe(x.nom)+'"'+(ret?' checked':'')+' title="Décochez si ce devis a été consulté mais écarté"></td>'
-        +'<td class="c-nom" data-l="Intervenant"><b>'+echappe(x.nom)+'</b>'+etiquetteBiblio(d,x.nom)+ecart+'</td>'
+        +'<td class="c-nom" data-l="Intervenant"><b>'+echappe(x.nom)+'</b>'+etiquetteBiblio(d,x.nom)+ecart
+          +(estLotOssature(lotDe(d,x.nom))?'<button class="lien-mt" data-montage="'+echappe(x.nom)+'">'+((d.montages||{})[x.nom]?'⚒ montage : '+d.montages[x.nom].jours.toLocaleString('fr-FR')+' j — modifier':'+ montage')+'</button>':'')
+          +'</td>'
         +'<td data-l="Lot"><input class="lot" type="text" list="listeLots" data-lot="'+echappe(x.nom)+'" value="'+echappe(lotDe(d,x.nom))+'" placeholder="lot"></td>'
         +'<td data-l="Nature"><select class="nat" data-nature="'+echappe(x.nom)+'">'
           +'<option value="sous-traitant"'+(natureDe(d,x.nom)==='sous-traitant'?' selected':'')+'>posée</option>'
@@ -1196,15 +1214,16 @@ function nbColonnes(){ return 8+(params.multiTaux?1:0)+(margeVisible(D())?1:0); 
 function estReplie(d,r){
   var v=(d.replis||{})[r.id];
   if(v!==undefined) return v;
-  return r.type==='chapitre' && refuse(d,r);
+  if(r.type==='chapitre' && refuse(d,r)) return true;
+  return r.type==='sous' && r.variante!=null && !!r.option;   /* option non retenue */
 }
 function lignesMasquees(d){
   var caches={}, nb={}, chap=-1, chapR=false, sous=-1, sousR=false;
   d.lignes.forEach(function(r,i){
     if(r.type==='chapitre'){ chap=i; chapR=estReplie(d,r); nb[i]=0; sousR=false; return; }
-    if(chapR){ caches[i]=true; if(r.type==='ligne') nb[chap]++; return; }
+    if(chapR){ caches[i]=true; nb[chap]++; return; }
     if(r.type==='sous'){ sous=i; sousR=estReplie(d,r); nb[i]=0; return; }
-    if(sousR){ caches[i]=true; if(r.type==='ligne') nb[sous]++; }
+    if(sousR){ caches[i]=true; nb[sous]++; }
   });
   return {caches:caches, nb:nb};
 }
@@ -1229,7 +1248,7 @@ function rendu(){
       +'<td class="num">'+(titre?'<button class="plie" data-a="plie" aria-expanded="'+(!replie)+'" title="'+(replie?'Déplier':'Replier')+'">'+(replie?'▸':'▾')+'</button>':'')+echappe(r.article)+'</td>'
       +'<td class="des"><div class="des-in">'+prefixe
         +'<textarea rows="1" data-c="designation" placeholder="'+ph+'">'+echappe(r.designation)+'</textarea>'
-        +(replie?'<span class="resume">'+(refuse(d,r)?'refusé · ':'')+M.nb[i]+' ligne'+(M.nb[i]>1?'s':'')+' masquée'+(M.nb[i]>1?'s':'')+'</span>':'')
+        +(replie?'<span class="resume">'+(refuse(d,r)?'refusé · ':'')+(r.type==='sous'&&r.variante!=null&&r.option?'non retenue · ':'')+M.nb[i]+' ligne'+(M.nb[i]>1?'s':'')+' masquée'+(M.nb[i]>1?'s':'')+'</span>':'')
         +'</div></td>'
       +'<td class="marche">'+(estLigne?'<input type="text" data-c="marche" value="'+echappe(r.marche)+'">':'')+'</td>'
       +'<td class="qte">'+(estLigne?'<input type="text" data-c="qte" value="'+echappe(afficheQte(r.qte))+'">':'')+'</td>'
@@ -1797,6 +1816,7 @@ function lisChiffrage(buf){
     }
     var f={feuille:nomF, lignes:[], totalFichier:0, tauxFichier:0, surface:0, titre:'', ignoree:''};
     if(!h){ f.ignoree='pas de colonnes Prix unitaire, Unité et Quantité'; feuilles.push(f); return; }
+    f.aJours = (h.j!=null);
     if(h.des==null){ h.des=0; while([h.pu,h.u,h.q,h.j,h.mo].indexOf(h.des)>-1) h.des++; }
     /* titre et surface de référence au-dessus des en-têtes */
     for(var r0=0;r0<hr;r0++){
@@ -2057,6 +2077,8 @@ $('onglets').addEventListener('click',function(e){
 });
 
 $('listeSt').addEventListener('click',function(e){
+  var bm=e.target.closest('button[data-montage]');
+  if(bm){ dialogueMontage(D(), bm.getAttribute('data-montage')); return; }
   var bb=e.target.closest('button[data-biblio]');
   if(bb){ dialogueEnregistrement(D(), bb.getAttribute('data-biblio')); return; }
   var bt=e.target.closest('button[data-retient]');
@@ -2065,8 +2087,10 @@ $('listeSt').addEventListener('click',function(e){
   var nom=b.getAttribute('data-retire');
   if(!confirm('Retirer « '+nom+' » et toutes ses lignes de ce devis ?')) return;
   var d=D();
-  d.lignes=d.lignes.filter(function(r){ return r.intervenant!==nom; });
+  var mont=(d.montages||{})[nom];
+  d.lignes=d.lignes.filter(function(r){ return r.intervenant!==nom && !(mont && r.intervenant===mont.nom); });
   if(d.bibli) delete d.bibli[nom];
+  if(mont){ delete d.montages[nom]; if(d.liensMontage) delete d.liensMontage[mont.nom]; }
   rendu();
 });
 
@@ -2377,6 +2401,7 @@ async function renduChantiers(){
   $('chTitre').textContent = enLigne ? 'Chantiers — consultation' : 'Mes chantiers';
   $('chAide').hidden = enLigne;
   $('chActualiser').hidden = !enLigne;
+  $('chRecup').innerHTML='';
   var recs;
   if(enLigne){
     $('chNote').textContent='chargement…';
@@ -2392,6 +2417,7 @@ async function renduChantiers(){
     $('chNote').textContent = (stockageOk ? 'enregistrés sur ce poste' : 'sauvegarde indisponible dans ce navigateur')
       + (peutPublier() && etatSync ? ' · '+etatSync.replace(/\.$/,'') : '');
     recs=await tousLesChantiers();
+    proposeRecuperation(recs);
   }
   var enCours=recs.filter(function(r){ return (r.statut||'en_cours')!=='clos'; });
   var clos=recs.filter(function(r){ return r.statut==='clos'; });
@@ -2427,9 +2453,45 @@ async function renduChantiers(){
   $('listeEnCours').innerHTML = enCours.length ? enCours.map(ligne).join('') : '<p class="note">Aucun chantier en cours.</p>';
   $('listeClos').innerHTML = clos.length ? clos.map(ligne).join('') : '<p class="note">Aucun chantier clos.</p>';
 }
+/* --------------- récupération des chantiers depuis la copie en ligne --------------- */
+/* Poste neuf, navigateur vidé : les chantiers présents en ligne mais absents du poste
+   peuvent être rapatriés. Ils reviennent rangés, sans onglet ouvert, statut conservé. */
+var chantiersARecuperer=[];
+async function proposeRecuperation(locaux){
+  if(!peutPublier() || params.biblioSeule) return;
+  try{
+    var ids={}; (locaux||[]).forEach(function(r){ ids[r.id]=1; });
+    var retires={}; suppressionsEnAttente().forEach(function(id){ retires[id]=1; });
+    var rows=await avecCle('edition',function(k){ return sbRpc('lister_chantiers',{p_cle:k}); });
+    chantiersARecuperer=(rows||[]).filter(function(r){ return r && r.contenu && !ids[r.id] && !retires[r.id]; });
+    if(!chantiersARecuperer.length) return;
+    var noms=chantiersARecuperer.slice(0,3).map(function(r){ return '« '+echappe(r.nom||'sans nom')+' »'; }).join(', ')
+      +(chantiersARecuperer.length>3?'…':'');
+    $('chRecup').innerHTML='<div class="controle ok" style="margin-bottom:12px">'
+      +chantiersARecuperer.length+(chantiersARecuperer.length>1?' chantiers existent':' chantier existe')
+      +' dans la copie en ligne mais pas sur ce poste : '+noms+'. '
+      +'<button class="mini" id="btnRecupChantiers">Les récupérer</button></div>';
+  }catch(e){ /* hors ligne : rien à proposer */ }
+}
+async function recupereChantiers(){
+  var n=0;
+  for(var i=0;i<chantiersARecuperer.length;i++){
+    var r=chantiersARecuperer[i], d=JSON.parse(JSON.stringify(r.contenu)), maj=Date.parse(r.maj)||Date.now();
+    d.id=r.id; d.statut=r.statut||d.statut||'en_cours'; d.maj=maj;
+    d.entete=d.entete||{}; d.lignes=d.lignes||[];
+    d._connu=true; d._pubMaj=maj; d._pubStatut=d.statut;      /* déjà à jour en ligne : pas de renvoi */
+    await ecrisChantier({id:d.id, ouvert:false, ordre:999, statut:d.statut, maj:maj, devis:d});
+    n++;
+  }
+  chantiersARecuperer=[];
+  info(n+(n>1?' chantiers récupérés':' chantier récupéré')+' depuis la copie en ligne. Ouvrez-les depuis cette page.',100,'ok');
+  renduChantiers();
+}
+
 $('pageChantiers').addEventListener('click',async function(e){
   var b=e.target.closest('button'); if(!b) return;
   var id;
+  if(b.id==='btnRecupChantiers'){ recupereChantiers(); return; }
   if(b.id==='btnActualiser'){ renduChantiers(); return; }
   if((id=b.getAttribute('data-ch-consulte'))){
     var rl=derniersEnLigne.find(function(x){return x.id===id;}); if(rl) ouvreEnLecture(rl);
@@ -2592,6 +2654,11 @@ async function traiteLot(liste){
     var r=await traiteUn(f[i],prefixe,i,f.length);
     bilan.push(r);
   }
+  if(bilan.length && bilan.every(function(b){ return b.chiffrage; })){
+    info('Chiffrage orienté vers l\'import de la bibliothèque : vérifiez l\'aperçu puis cliquez « Importer ».',100,'ok');
+    return;
+  }
+  var notes=bilan.map(function(b){ return b.note; }).filter(Boolean);
   var ko=bilan.filter(function(b){return b.repli;}).length;
   var nb=bilan.reduce(function(s,b){return s+b.lignes;},0);
   var st=D().mode==='st';
@@ -2606,6 +2673,7 @@ async function traiteLot(liste){
         100,'err');
   } else {
     info(tete+nb+' lignes au total.'
+        +(notes.length?' '+notes.join(' ; ').replace(/^./,function(c){return c.toUpperCase();})+'.':'')
         +(ko?' '+ko+' sans IA'+(raison?' ('+raison+')':'')+', à relire de près.':' Vérifiez avant export.'),
         100, ko?'avertit':'ok');
   }
@@ -2615,6 +2683,17 @@ async function traiteLot(liste){
 
 async function traiteUn(f,prefixe,idx,total){
   var base=function(p){ return Math.round(((idx+p/100)/total)*100); };
+  /* Un chiffrage DHC déposé ici par erreur : on propose l'import dans la bibliothèque. */
+  if(estExcel(f)){
+    try{
+      if(estChiffrage(new Uint8Array(await f.arrayBuffer()))
+         && confirm('« '+f.name+' » ressemble à un chiffrage DHC (jours de main-d\'œuvre, total hors marge), pas à un devis reçu.\n\nL\'importer dans la bibliothèque de modèles ?\n\nOK : ouvrir l\'import de la bibliothèque\nAnnuler : le traiter quand même comme un devis')){
+        location.hash='#bibliotheque';
+        setTimeout(function(){ dialogueImportChiffrage(f); },150);
+        return {lignes:0, repli:false, chiffrage:true};
+      }
+    }catch(e){ /* lecture impossible : on poursuit comme un devis */ }
+  }
   var cible, ajout=false;
   if(D() && D().mode==='st'){ cible=D(); ajout=true; }              /* on empile dans le devis courant */
   else if(D() && !D().lignes.length && !D().texteBrut){ cible=D(); }
@@ -2622,7 +2701,7 @@ async function traiteUn(f,prefixe,idx,total){
   try{
     if(estExcel(f)){
       info(prefixe+'Lecture du fichier Excel…',base(20));
-      var xl=lireExcel(await f.arrayBuffer());
+      var xl=lireExcel(new Uint8Array(await f.arrayBuffer()));
       cible.texteBrut=xl.texte;
       var resX=xl.res, repliX='';
       if(!resX || !resX.lignes.length){
@@ -2637,7 +2716,10 @@ async function traiteUn(f,prefixe,idx,total){
       }
       applique(cible,resX,f.name,ajout);
       rendu();
-      return {lignes:cible.lignes.filter(function(x){return x.type==='ligne';}).length, repli:false};
+      var noteF = (xl.feuille && xl.nbFeuilles>1)
+        ? 'feuille « '+xl.feuille+' » retenue sur '+xl.nbFeuilles
+          +(xl.autres&&xl.autres.length?' (lignes aussi dans : '+xl.autres.join(', ')+')':'') : '';
+      return {lignes:cible.lignes.filter(function(x){return x.type==='ligne';}).length, repli:false, note:noteF};
     }
     info(prefixe+'Lecture du PDF…',base(10));
     var lu=await lirePdf(f,function(p,t,img){
@@ -2673,8 +2755,9 @@ async function traiteUn(f,prefixe,idx,total){
     } else { info(prefixe+'Découpage automatique…',base(70)); res=analyseLocale(texte); }
     applique(cible,res,f.name,ajout);
     rendu();
+    var noteM=cible._noteMontage||''; delete cible._noteMontage;
     return {lignes:cible.lignes.filter(function(r){return r.type==='ligne';}).length,
-            repli:!!repli, raison:repli};
+            repli:!!repli, raison:repli, note:noteM};
   }catch(err){
     console.error(err);
     info(prefixe+'Échec : '+(err.message||err),base(100),'err');
@@ -2694,17 +2777,35 @@ function celNb(row,c){
   if(c==null||row[c]==null||row[c]==='') return 0;
   return typeof row[c]==='number' ? row[c] : nombreFr(row[c]);
 }
+/* Toutes les feuilles sont examinées ; on retient celle qui porte le plus de lignes
+   chiffrées. À défaut, l'IA reçoit toutes les feuilles, repérées par leur nom. */
 function lireExcel(buf){
-  var wb=XLSX.read(buf,{type:'array'}), premierCsv='';
+  var wb=XLSX.read(buf,{type:'array'}), candidats=[], toutes=[];
   for(var i=0;i<wb.SheetNames.length;i++){
-    var ws=wb.Sheets[wb.SheetNames[i]];
+    var nom=wb.SheetNames[i], ws=wb.Sheets[nom];
     var rows=XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:null,blankrows:false});
     var csv=XLSX.utils.sheet_to_csv(ws,{FS:' ; '});
-    if(i===0) premierCsv=csv;
+    toutes.push('=== FEUILLE '+nom+' ===\n'+csv);
     var h=trouveEntetes(rows);
-    if(h) return {res:construitDepuisExcel(rows,h), texte:csv};
+    if(h){
+      var res=construitDepuisExcel(rows,h);
+      var n=res.lignes.filter(function(l){ return l.type==='ligne'; }).length;
+      if(n) candidats.push({res:res, texte:csv, feuille:nom, n:n});
+    }
   }
-  return {res:null, texte:premierCsv};
+  if(candidats.length){
+    candidats.sort(function(a,b){ return b.n-a.n; });
+    var c=candidats[0];
+    c.nbFeuilles=wb.SheetNames.length; c.autres=candidats.slice(1).map(function(x){ return x.feuille; });
+    return c;
+  }
+  return {res:null, texte:toutes.join('\n\n'), nbFeuilles:wb.SheetNames.length};
+}
+/* Un chiffrage DHC : colonnes de jours de main-d'œuvre, ou ligne « total HT hors marge ». */
+function estChiffrage(buf){
+  try{
+    return lisChiffrage(buf).some(function(f){ return !f.ignoree && (f.aJours || f.totalFichier>0); });
+  }catch(e){ return false; }
 }
 /* Repère la ligne d'en-têtes et la position de chaque colonne, quel que soit l'ordre. */
 function trouveEntetes(rows){
@@ -2849,12 +2950,13 @@ var SYSTEME =
 "Tu convertis des devis du bâtiment en structure d'import Vertuoza.\n"+
 "Réponds UNIQUEMENT par un objet JSON valide, sans texte autour, sans balises markdown.\n"+
 "Schéma :\n"+
-'{"entete":{"client":"","chantier":"","reference":"","date":"","intervenant":"","lot":"","nature":"","total_ht":0},'+
+'{"entete":{"client":"","chantier":"","reference":"","date":"","intervenant":"","lot":"","nature":"","total_ht":0,"surface_ossature":0,"metre_surfaces":[{"element":"","surface":0}]},'+
 '"lignes":[{"type":"ligne","designation":"","unite":"","qte":0,"pu":0},{"type":"texte","designation":""}],'+
 '"variantes":[{"nom":"","total_ht":0,"lignes":[]}]}\n'+
 "Règles :\n"+
 "- intervenant : la raison sociale de l'entreprise qui ÉMET le devis. Elle figure en TÊTE DE LA PREMIÈRE PAGE, dans l'en-tête ou le logo. Ne la cherche jamais dans les conditions de vente, les mentions légales, le RIB ou une clause de médiation.\n"+
 "- nature : \"fournisseur\" si le document vend de la marchandise sans pose (négoce, matériaux, produits référencés), \"sous-traitant\" s'il vend une prestation posée.\n"+
+"- metre_surfaces et surface_ossature : si le document contient un tableau de métré d'une structure (ossature, charpente : planchers, murs, toiture…), donne chaque élément avec sa surface en m² dans metre_surfaces, sans la ligne TOTAL, et dans surface_ossature le total du tableau (ligne TOTAL s'il y en a une, sinon la somme). Sinon, surface_ossature = 0 et metre_surfaces = [].\n"+
 "- total_ht : le montant HT total du devis, tel qu'il est imprimé sur le document. Recopie-le, ne le recalcule pas. S'il y a plusieurs totaux (avec et sans options), prends celui de la solution de base.\n"+
 "- lot : le corps d'état dominant du devis, en un ou deux mots (Électricité, Plomberie, Plâtrerie-peinture, Serrurerie, Menuiserie, Maçonnerie, Couverture, Carrelage, Terrassement…).\n"+
 "- type chapitre : un lot ou un poste principal (MACONNERIE, COUVERTURE, AMENAGEMENT DE CHANTIER…).\n"+
@@ -3101,6 +3203,9 @@ function choisirVariante(d,cle,j){
     if(r.variante==null || (r.intervenant||'')!==cle) return;
     r.option=(r.variante!==j);
   });
+  if(d.replis) d.lignes.forEach(function(r){
+    if(r.type==='sous' && r.variante!=null && (r.intervenant||'')===cle) delete d.replis[r.id];
+  });
   var t=nombreFr((v.liste[j]||{}).total_ht)||0;
   if(cle){ if(!d.totauxLus) d.totauxLus={}; d.totauxLus[cle]=t; }
   else d.totalLu=t;
@@ -3174,7 +3279,77 @@ function ajouteIntervenant(d,res,nomFichier){
   if(!d.feuille||d.feuille==='Devis'){
     d.feuille=nomFeuilleSure('Chantier_'+(d.entete.chantier||d.entete.client||'sous-traitants'),d);
   }
+  /* ossature métallique : surfaces du métré conservées, montage calculé */
+  if(estLotOssature(lot)){
+    var elts=(e.metre_surfaces||[]).filter(function(x){ return x && nombreFr(x.surface)>0 && !/total/i.test(x.element||''); })
+      .map(function(x){ return {element:String(x.element||'').trim(), surface:nombreFr(x.surface)}; });
+    var surf=nombreFr(e.surface_ossature) || elts.reduce(function(t,x){ return t+x.surface; },0);
+    if(!d.metres) d.metres={};
+    d.metres[nom]={surface:surf, elements:elts};
+    if(surf>0){
+      var mt=ajouteMontage(d,nom,surf,params.rendMontage);
+      d._noteMontage='montage calculé : '+surf.toLocaleString('fr-FR')+' m² ÷ '+params.rendMontage.toLocaleString('fr-FR')+' = '+mt.jours.toLocaleString('fr-FR')+' jours';
+    } else {
+      d._noteMontage='ossature sans surfaces lisibles : ajoutez le montage avec le bouton « + montage »';
+    }
+  }
   return nom;
+}
+
+/* ============================ MONTAGE D'OSSATURE ============================
+   Jours = surface ÷ rendement, arrondis au demi-jour supérieur. Chapitre DHC
+   à part, placé sous le fournisseur, marge du dossier appliquée. */
+function estLotOssature(lot){
+  var k=cleLot(lot||''); return k.indexOf('ossature')>-1 && k.indexOf('montage')<0;
+}
+function joursMontage(surface,rendement){ return Math.ceil((surface/(rendement||30))*2)/2; }
+function ajouteMontage(d,source,surface,rendement){
+  if(!d.liensMontage) d.liensMontage={};
+  if(!d.montages) d.montages={};
+  var ancien=(d.montages[source]||{}).nom;
+  if(ancien) d.lignes=d.lignes.filter(function(r){ return r.intervenant!==ancien; });
+  var nomM='DHC · '+source;
+  var jours=joursMontage(surface,rendement);
+  var detail=((d.metres||{})[source]||{}).elements||[];
+  var lignes=[{type:'ligne', designation:'Montage ossature métallique — '+surface.toLocaleString('fr-FR')+' m² à '
+      +(rendement||30).toLocaleString('fr-FR')+' m²/jour', unite:'Jour(s)', qte:jours, pu:params.tauxMO}];
+  if(detail.length) lignes.push({type:'texte', designation:detail.map(function(x){ return x.element+' : '+x.surface.toLocaleString('fr-FR')+' m²'; }).join(' · ')});
+  var nom=ajouteIntervenant(d,{entete:{intervenant:nomM, lot:'Montage ossature', nature:'dhc', total_ht:0}, lignes:lignes},nomM);
+  d.liensMontage[nom]=source;
+  d.montages[source]={nom:nom, surface:surface, rendement:rendement||30, jours:jours};
+  /* placement : juste après le bloc du fournisseur */
+  var bloc=d.lignes.filter(function(r){ return r.intervenant===nom; });
+  d.lignes=d.lignes.filter(function(r){ return r.intervenant!==nom; });
+  var fin=-1; d.lignes.forEach(function(r,i){ if(r.intervenant===source) fin=i; });
+  Array.prototype.splice.apply(d.lignes,[fin+1,0].concat(bloc));
+  return {nom:nom, jours:jours};
+}
+function dialogueMontage(d,source){
+  var m=(d.montages||{})[source]||{}, met=(d.metres||{})[source]||{};
+  var surf=m.surface||met.surface||nombreFr(d.surface)||0, rend=m.rendement||params.rendMontage;
+  ouvreModale('Montage de l\'ossature — '+source,
+     (met.elements&&met.elements.length?'<p class="note" style="margin-top:0">Métré lu dans le devis : '
+        +met.elements.map(function(x){ return echappe(x.element)+' '+x.surface.toLocaleString('fr-FR')+' m²'; }).join(' · ')+'</p>':'')
+    +'<div class="grille">'
+    +'<div><label class="champ" for="mtSurf">Surface à monter (m²)</label><input type="text" id="mtSurf" inputmode="decimal" value="'+(surf||'')+'"></div>'
+    +'<div><label class="champ" for="mtRend">Rendement (m² / jour)</label><input type="text" id="mtRend" inputmode="decimal" value="'+String(rend).replace('.',',')+'"></div>'
+    +'</div><p class="note" id="mtCalc"></p>',
+    [{lib:'Annuler', action:function(){}},
+     {lib:m.nom?'Mettre à jour le montage':'Créer le montage', plein:true, action:function(){
+        var s2=nombreFr($('mtSurf').value), r2=nombreFr($('mtRend').value)||params.rendMontage;
+        if(!(s2>0)){ $('mtSurf').focus(); return false; }
+        if(!d.metres) d.metres={};
+        d.metres[source]=Object.assign({elements:[]},met,{surface:s2});
+        var res=ajouteMontage(d,source,s2,r2);
+        rendu();
+        info('Montage : '+s2.toLocaleString('fr-FR')+' m² ÷ '+r2.toLocaleString('fr-FR')+' = '+res.jours.toLocaleString('fr-FR')+' jours × '+eur(params.tauxMO)+' = '+eur(res.jours*params.tauxMO)+' de déboursé.',100,'ok');
+     }}]);
+  var calc=function(){
+    var s3=nombreFr($('mtSurf').value), r3=nombreFr($('mtRend').value)||params.rendMontage;
+    $('mtCalc').textContent = s3>0 ? (s3/r3).toLocaleString('fr-FR',{maximumFractionDigits:2})+' jours, arrondis au demi-jour supérieur : '
+      +joursMontage(s3,r3).toLocaleString('fr-FR')+' jours × '+eur(params.tauxMO)+' = '+eur(joursMontage(s3,r3)*params.tauxMO)+' de déboursé, avant marge.' : '';
+  };
+  $('mtSurf').addEventListener('input',calc); $('mtRend').addEventListener('input',calc); calc();
 }
 
 function nomFeuilleSure(brut,sauf){
@@ -3578,6 +3753,11 @@ $('optMarche').checked=params.marche;
 $('margeDef').value=String(params.margeDefaut).replace('.',',');
 $('margeMode').value=params.margeMode;
 $('tauxMO').value=String(params.tauxMO).replace('.',',');
+$('rendMontage').value=String(params.rendMontage).replace('.',',');
+$('rendMontage').addEventListener('blur',function(){
+  var n=nombreFr(this.value); if(!(n>0)) n=30;
+  params.rendMontage=Math.round(n*100)/100; this.value=String(params.rendMontage).replace('.',','); sauveParams();
+});
 $('tauxMO').addEventListener('blur',function(){
   var n=nombreFr(this.value); if(!(n>0)) n=906;
   params.tauxMO=Math.round(n*100)/100; this.value=String(params.tauxMO).replace('.',','); sauveParams();
